@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import StatusBadge from '../../components/StatusBadge';
-import { FiMapPin, FiCalendar, FiUser, FiArrowLeft, FiStar } from 'react-icons/fi';
-import { fetchRequestDetail, requestTicketReschedule, submitRequestRating } from '../../api/api';
+import { FiMapPin, FiCalendar, FiUser, FiArrowLeft, FiStar, FiImage, FiX } from 'react-icons/fi';
+import { api, fetchRequestDetail, requestTicketReschedule, submitRequestRating } from '../../api/api';
 import { getLocalDateInputValue } from '../../utils/date';
 
 const TIME_SLOT_LABELS = {
@@ -30,11 +30,28 @@ export default function ClientRequestDetail() {
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
   const [rescheduleReason, setRescheduleReason] = useState('');
+  const [proofImages, setProofImages] = useState([]);
+  const [loadingProofImages, setLoadingProofImages] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
   const entityType = searchParams.get('entity') || 'request';
 
   useEffect(() => {
     loadRequest();
   }, [requestId, entityType]);
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscKey = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedImage(null);
+      }
+    };
+    
+    if (selectedImage) {
+      window.addEventListener('keydown', handleEscKey);
+      return () => window.removeEventListener('keydown', handleEscKey);
+    }
+  }, [selectedImage]);
 
   const loadRequest = async () => {
     setLoading(true);
@@ -48,11 +65,29 @@ export default function ClientRequestDetail() {
       setRescheduleTimeSlot(data.preferred_time_slot || data.scheduled_time_slot || '');
       setRescheduleReason(data.reschedule_reason || data.scheduling_notes || '');
       setError(null);
+      
+      // Load proof images if ticket is completed
+      if (data.status === 'completed' && data.ticket_id) {
+        loadProofImages(data.ticket_id);
+      }
     } catch (err) {
       setError('Failed to load request details');
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadProofImages = async (ticketId) => {
+    setLoadingProofImages(true);
+    try {
+      const response = await api.get(`/services/service-tickets/${ticketId}/proof_images/`);
+      setProofImages(response.data.completion_proof_images || []);
+    } catch (err) {
+      console.warn('Could not load proof images:', err);
+      setProofImages([]);
+    } finally {
+      setLoadingProofImages(false);
     }
   };
 
@@ -180,54 +215,72 @@ export default function ClientRequestDetail() {
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
+      <div className="space-y-8 pb-8">
+        {/* Header with improved styling */}
+        <div className="flex items-start gap-4 mb-8">
           <button
             onClick={() => navigate('/client/requests')}
-            className="p-2 hover:bg-slate-100 rounded text-slate-600 transition"
+            className="mt-1 p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+            title="Back to requests"
           >
             <FiArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-800">
-              Service Request #{request.request_id || request.id}
-            </h1>
-            <p className="text-sm text-slate-600 mt-1">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
+              <h1 className="text-3xl font-bold text-slate-900">
+                Service Request #{request.request_id || request.id}
+              </h1>
+              <StatusBadge status={request.status} size="lg" />
+            </div>
+            <p className="text-slate-600">
               {request.service_type_name || request.service_type}
-              {request.ticket_id ? ` | Linked ticket #${request.ticket_id}` : ' | Awaiting dispatch'}
+              {request.ticket_id
+                ? ` • Ticket #${request.ticket_id}`
+                : request.status === 'pending'
+                  ? ' • Pending review'
+                  : ' • Awaiting dispatch'}
             </p>
           </div>
         </div>
 
-        {/* Status Section */}
-        <div className="rounded-lg bg-white p-6 shadow-sm border border-slate-200">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        {/* Status Section - Enhanced */}
+        <div className="rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 p-6 shadow-sm border border-blue-200">
+          <div className="grid md:grid-cols-3 gap-6">
             <div>
-              <p className="text-sm text-slate-600 mb-2">Status</p>
-              <div className="flex flex-wrap items-center gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">Status</p>
+              <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={request.status} size="lg" />
-                <span className={`px-3 py-1 rounded text-sm font-medium ${getPriorityColor(request.priority)}`}>
-                  {request.priority?.toUpperCase()} Priority
+                <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide ${
+                  request.priority?.toLowerCase() === 'urgent' 
+                    ? 'bg-red-100 text-red-700'
+                    : request.priority?.toLowerCase() === 'high'
+                    ? 'bg-orange-100 text-orange-700'
+                    : request.priority?.toLowerCase() === 'low'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {request.priority?.toUpperCase()} PRIORITY
                 </span>
               </div>
               {request.operational_status && request.operational_status !== request.status && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                  <span className="font-medium text-slate-500">Operational stage</span>
+                  <span className="font-medium text-slate-500">Stage:</span>
                   <StatusBadge status={request.operational_status} size="sm" />
                 </div>
               )}
             </div>
             {request.progress && (
               <div>
-                <p className="text-sm text-slate-600 mb-2">Progress</p>
-                <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary transition-all"
-                    style={{ width: `${request.progress}%` }}
-                  ></div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">Progress</p>
+                <div className="space-y-2">
+                  <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                    <div 
+                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500 rounded-full"
+                      style={{ width: `${request.progress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">{request.progress}% Complete</p>
                 </div>
-                <p className="text-xs text-slate-600 mt-1">{request.progress}% Complete</p>
               </div>
             )}
           </div>
@@ -446,6 +499,134 @@ export default function ClientRequestDetail() {
                 <p className="mt-3 text-sm text-slate-700">{request.warranty_notes}</p>
               )}
             </div>
+
+            {/* Proof Images Section */}
+            {isCompleted && request.ticket_id && (
+              <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 p-8 shadow-md border border-slate-200 overflow-hidden">
+                {/* Header with Icon */}
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                    <FiImage className="text-white" size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-900">Proof of Work</h3>
+                    <p className="text-sm text-slate-600 mt-1">Technician-verified completion photos</p>
+                  </div>
+                </div>
+                
+                {loadingProofImages ? (
+                  <div className="py-12 text-center">
+                    <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-white shadow-md mb-4">
+                      <div className="h-8 w-8 animate-spin rounded-full border-3 border-slate-300 border-t-blue-600"></div>
+                    </div>
+                    <p className="text-sm text-slate-600 font-medium">Loading proof images...</p>
+                  </div>
+                ) : proofImages.length > 0 ? (
+                  <div className="space-y-5">
+                    {/* Image Count Badge */}
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200">
+                        <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                        <span className="text-sm font-semibold text-slate-700">
+                          {proofImages.length} image{proofImages.length !== 1 ? 's' : ''} verified
+                        </span>
+                      </span>
+                    </div>
+                    
+                    {/* Image Gallery Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 pt-2">
+                      {proofImages.map((imageUrl, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setSelectedImage(imageUrl)}
+                          className="group relative overflow-hidden rounded-xl bg-white border border-slate-200 hover:border-blue-400 aspect-square shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer transform hover:scale-105"
+                        >
+                          {imageUrl.toLowerCase().includes('.mp4') || imageUrl.toLowerCase().includes('.webm') ? (
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
+                              <div className="text-center">
+                                <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-white/10 mb-2">
+                                  <span className="text-2xl">▶</span>
+                                </div>
+                                <span className="text-xs text-white font-semibold">Video</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <img
+                              src={imageUrl}
+                              alt={`Proof ${idx + 1}`}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              onError={(e) => {
+                                e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                e.currentTarget.alt = 'Image failed to load';
+                              }}
+                            />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-3">
+                            <span className="text-white text-sm font-semibold">View</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-12 text-center">
+                    <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-white shadow-md mb-4">
+                      <FiImage className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <p className="text-slate-600 font-medium">No proof images found</p>
+                    <p className="text-sm text-slate-500 mt-1">The technician did not upload proof images for this service</p>
+                  </div>
+                )}
+
+                {/* Full Screen Image Modal */}
+                {selectedImage && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-sm">
+                    <div className="relative max-w-5xl w-full max-h-[90vh] flex flex-col">
+                      {/* Close Button */}
+                      <button
+                        onClick={() => setSelectedImage(null)}
+                        className="absolute -top-12 right-0 text-white hover:bg-white/20 p-2 rounded-lg transition-colors z-10"
+                        title="Close"
+                      >
+                        <FiX size={28} />
+                      </button>
+
+                      {/* Media Container */}
+                      <div className="flex-1 flex items-center justify-center overflow-auto bg-black/50 rounded-xl">
+                        {selectedImage.toLowerCase().includes('.mp4') || selectedImage.toLowerCase().includes('.webm') ? (
+                          <video
+                            src={selectedImage}
+                            controls
+                            className="max-w-full max-h-[80vh] rounded-lg"
+                            autoPlay
+                          />
+                        ) : (
+                          <img
+                            src={selectedImage}
+                            alt="Proof"
+                            className="max-w-full max-h-[80vh] rounded-lg object-contain shadow-2xl"
+                          />
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center justify-between mt-4 px-2">
+                        <p className="text-white/80 text-sm">
+                          Click outside or press ESC to close
+                        </p>
+                        <a
+                          href={selectedImage}
+                          download
+                          className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+                        >
+                          ⬇ Download
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Rating Section (for completed requests) */}
             {isCompleted && request.ticket_id && (

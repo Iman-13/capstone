@@ -141,7 +141,7 @@ class InventoryItem(models.Model):
         
         # Notify all admins
         from users.models import User
-        admins = User.objects.filter(role='admin')
+        admins = User.objects.filter(role__in=['superadmin', 'admin'])
         
         for admin in admins:
             Notification.objects.get_or_create(

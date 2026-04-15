@@ -101,9 +101,14 @@ export const updateTechnicianLocation = async ({ techName, lat, lng, accuracy })
   }
 };
 
-export const fetchServiceTickets = async () => {
+export const fetchServiceTickets = async (filters = {}) => {
   try {
-    const { data } = await api.get('/services/service-tickets/');
+    const params = {};
+    if (filters.workspace) {
+      params.workspace = filters.workspace;
+    }
+
+    const { data } = await api.get('/services/service-tickets/', { params });
     const ticketArray = Array.isArray(data) ? data : (data.results || []);
     return ticketArray.map(normalizeTicket);
   } catch (error) {

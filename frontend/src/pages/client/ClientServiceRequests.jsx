@@ -5,6 +5,22 @@ import 'leaflet/dist/leaflet.css';
 import { fetchServiceTickets, fetchServiceTypes, createServiceRequest } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 import { getLocalDateInputValue } from '../../utils/date';
+import { FiSearch } from 'react-icons/fi';
+
+// Debounce helper
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  
+  return debouncedValue;
+};
 
 const TIME_SLOT_OPTIONS = [
   { value: '', label: 'No preference' },
@@ -14,13 +30,23 @@ const TIME_SLOT_OPTIONS = [
   { value: 'evening', label: 'Evening (5 PM - 8 PM)' }
 ];
 
-function LocationPicker({ lat, lng, setLat, setLng }) {
-  useMapEvents({
+function LocationPicker({ lat, lng, setLat, setLng, onLocationChange, mapRef }) {
+  const map = useMapEvents({
     click(e) {
       setLat(e.latlng.lat);
       setLng(e.latlng.lng);
+      if (onLocationChange) {
+        onLocationChange(e.latlng.lat, e.latlng.lng);
+      }
     }
   });
+
+  // Update map center when coordinates change
+  useEffect(() => {
+    if (lat != null && lng != null && map) {
+      map.setView([lat, lng], map.getZoom());
+    }
+  }, [lat, lng, map]);
 
   return lat != null && lng != null ? <Marker position={[lat, lng]} /> : null;
 }
@@ -43,6 +69,11 @@ export default function ClientServiceRequests() {
   const [submitError, setSubmitError] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [mapCenter, setMapCenter] = useState([12.8797, 121.7740]);
+
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
   const loadPageData = async () => {
     try {
@@ -64,6 +95,67 @@ export default function ClientServiceRequests() {
   useEffect(() => {
     loadPageData();
   }, []);
+
+  useEffect(() => {
+    searchLocation(debouncedSearchQuery);
+  }, [debouncedSearchQuery]);
+
+  const searchLocation = async (query) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`
+      );
+      const results = await response.json();
+      setSearchResults(results);
+    } catch (err) {
+      console.error('Location search failed:', err);
+      setSearchResults([]);
+    }
+  };
+
+  const selectSearchResult = (result) => {
+    const lat = parseFloat(result.lat);
+    const lng = parseFloat(result.lon);
+    setLatitude(lat);
+    setLongitude(lng);
+    setMapCenter([lat, lng]);
+    setAddress(result.display_name.split(',')[0]);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  // Reverse geocoding: Get address from coordinates
+  const reverseGeocode = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      );
+      const result = await response.json();
+      if (result.address) {
+        // Extract main address components
+        const road = result.address.road || result.address.name || '';
+        const city = result.address.city || result.address.town || result.address.village || '';
+        const province = result.address.state || result.address.province || '';
+        
+        setAddress(road || result.display_name.split(',')[0]);
+        setCity(city);
+        setProvince(province);
+      }
+    } catch (err) {
+      console.error('Reverse geocoding failed:', err);
+    }
+  };
+
+  // Handle map location change (when user clicks on map)
+  const handleLocationChange = (lat, lng) => {
+    setMapCenter([lat, lng]);
+    reverseGeocode(lat, lng);
+  };
 
   const createRequest = async (e) => {
     e.preventDefault();
@@ -89,6 +181,21 @@ export default function ClientServiceRequests() {
       setSubmitError('Please add a location note (street/landmark).');
       return;
     }
+    if (!city.trim()) {
+      setMessage('');
+      setSubmitError('Please enter a city.');
+      return;
+    }
+    if (!province.trim()) {
+      setMessage('');
+      setSubmitError('Please enter a province.');
+      return;
+    }
+    if (!preferredDate) {
+      setMessage('');
+      setSubmitError('Please select a preferred appointment date.');
+      return;
+    }
 
     setIsSubmitting(true);
     setMessage('Submitting service request...');
@@ -107,7 +214,7 @@ export default function ClientServiceRequests() {
         longitude
       });
       setSubmitError('');
-      setMessage(`Service request #${createdRequest.id} created successfully.`);
+      setMessage(`Service request #${createdRequest.id} submitted for review.`);
       setAddress('');
       setCity('');
       setProvince('');
@@ -158,28 +265,29 @@ export default function ClientServiceRequests() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium">Address / Landmark</label>
-            <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded border px-2 py-2" placeholder="E.g., near SM Mall of Asia" />
+            <label className="block text-sm font-medium">Address / Landmark *</label>
+            <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded border px-2 py-2" placeholder="E.g., near SM Mall of Asia" required />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium">City</label>
-              <input value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded border px-2 py-2" placeholder="Optional" />
+              <label className="block text-sm font-medium">City *</label>
+              <input value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded border px-2 py-2" placeholder="Enter city name" required />
             </div>
             <div>
-              <label className="block text-sm font-medium">Province</label>
-              <input value={province} onChange={(e) => setProvince(e.target.value)} className="w-full rounded border px-2 py-2" placeholder="Optional" />
+              <label className="block text-sm font-medium">Province *</label>
+              <input value={province} onChange={(e) => setProvince(e.target.value)} className="w-full rounded border px-2 py-2" placeholder="Enter province name" required />
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium">Preferred Appointment Date</label>
+              <label className="block text-sm font-medium">Preferred Appointment Date *</label>
               <input
                 type="date"
                 value={preferredDate}
                 onChange={(e) => setPreferredDate(e.target.value)}
                 min={getLocalDateInputValue()}
                 className="w-full rounded border px-2 py-2"
+                required
               />
             </div>
             <div>
@@ -224,10 +332,43 @@ export default function ClientServiceRequests() {
 
         <div className="rounded-xl bg-white p-4 shadow-sm">
           <h3 className="text-lg font-semibold">Location Picker</h3>
-          <p className="text-sm text-slate-500 mb-2">Tap/click map to set a precise service location.</p>
-          <MapContainer center={[12.8797, 121.7740]} zoom={6} className="h-60 w-full">
+          <p className="text-sm text-slate-500 mb-3">Search for a place or tap/click the map to set location.</p>
+          
+          <div className="mb-4">
+            <div className="relative">
+              <div className="flex items-center gap-2 rounded border border-slate-300 px-3 py-2 focus-within:ring-2 focus-within:ring-blue-500">
+                <FiSearch className="text-slate-400" size={18} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search for address, city, or landmark..."
+                  className="flex-1 bg-transparent text-sm outline-none"
+                  autoComplete="off"
+                />
+              </div>
+              
+              {searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 border border-slate-200 rounded bg-white shadow-xl z-50 max-h-60 overflow-y-auto">
+                  {searchResults.map((result, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => selectSearchResult(result)}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-slate-100 last:border-b-0 text-sm text-slate-700 transition"
+                    >
+                      <div className="font-medium truncate">{result.display_name.split(',')[0]}</div>
+                      <div className="text-xs text-slate-500 truncate">{result.display_name}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <MapContainer center={mapCenter} zoom={13} className="h-60 w-full rounded border">
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <LocationPicker lat={latitude} lng={longitude} setLat={setLatitude} setLng={setLongitude} />
+            <LocationPicker lat={latitude} lng={longitude} setLat={setLatitude} setLng={setLongitude} onLocationChange={handleLocationChange} />
           </MapContainer>
           <div className="mt-3 text-sm font-medium text-slate-700">
             Selected location: {latitude != null ? latitude.toFixed(6) : 'unset'} , {longitude != null ? longitude.toFixed(6) : 'unset'}

@@ -28,6 +28,16 @@ const CASE_TYPE_TONES = {
   revisit: 'bg-violet-100 text-violet-800',
   feedback: 'bg-sky-100 text-sky-800'
 };
+const CREATION_SOURCE_TONES = {
+  manual: 'bg-slate-200 text-slate-700',
+  completion_flow: 'bg-amber-100 text-amber-800',
+  maintenance_alert: 'bg-emerald-100 text-emerald-800'
+};
+const CREATION_SOURCE_LABELS = {
+  manual: 'Manual',
+  completion_flow: 'From Completion',
+  maintenance_alert: 'Maintenance Alert'
+};
 
 const formatDate = (value) => {
   if (!value) return 'No date set';
@@ -93,6 +103,7 @@ export default function FollowUpDashboard() {
   const revisitCaseCount = caseBreakdown.revisit ?? 0;
   const customerRecoveryCount = complaintCaseCount + revisitCaseCount;
   const maintenanceWatchCount = (overview.maintenance_due_soon ?? 0) + (overview.maintenance_due ?? 0);
+  const completionHandoffs = overview.completion_handoffs ?? 0;
   const caseMixEntries = Object.entries(caseBreakdown).sort(([, left], [, right]) => right - left);
   const totalCaseMix = caseMixEntries.reduce((sum, [, count]) => sum + count, 0);
 
@@ -104,9 +115,9 @@ export default function FollowUpDashboard() {
       tone: 'border-sky-400/30 bg-sky-400/10 text-sky-100'
     },
     {
-      label: 'Customer Recovery',
-      value: customerRecoveryCount,
-      note: 'Complaints + revisits',
+      label: 'Completion Handoffs',
+      value: completionHandoffs,
+      note: 'Auto-created from technician flow',
       tone: 'border-orange-300/30 bg-orange-300/10 text-orange-100'
     },
     {
@@ -131,6 +142,9 @@ export default function FollowUpDashboard() {
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base">
                 Keep callbacks, warranties, complaints, revisits, and maintenance reminders visible so customer
                 promises stay owned after the technician leaves the site.
+              </p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-amber-100">
+                Technician checklist handoffs now land here automatically once the related ticket is completed.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <button
@@ -173,7 +187,7 @@ export default function FollowUpDashboard() {
           <StatsCard title="Open pipeline" value={overview.open_cases ?? 0} color="text-sky-600" />
           <StatsCard title="Overdue recoveries" value={overview.overdue_cases ?? 0} color="text-rose-600" />
           <StatsCard title="Resolved this week" value={overview.resolved_this_week ?? 0} color="text-emerald-600" />
-          <StatsCard title="Awaiting review" value={overview.follow_up_candidates ?? 0} color="text-amber-600" />
+          <StatsCard title="Jobs without cases" value={overview.follow_up_candidates ?? 0} color="text-amber-600" />
           <StatsCard title="Maintenance watch" value={maintenanceWatchCount} color="text-emerald-700" />
         </div>
       </section>
@@ -195,20 +209,28 @@ export default function FollowUpDashboard() {
           </div>
           <div className="mt-5 space-y-3">
             {recentCases.length > 0 ? (
-              recentCases.map((item) => (
-                <div key={item.id} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
+                recentCases.map((item) => (
+                  <div key={item.id} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${CASE_TYPE_TONES[item.case_type] || 'bg-slate-200 text-slate-700'}`}>
                           {formatCaseType(item.case_type)}
                         </span>
                         <StatusBadge status={item.status} size="sm" />
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${CREATION_SOURCE_TONES[item.creation_source] || 'bg-slate-200 text-slate-700'}`}>
+                          {item.creation_source_label || CREATION_SOURCE_LABELS[item.creation_source] || 'Manual'}
+                        </span>
                       </div>
                       <div className="mt-3 text-base font-semibold text-slate-900">{item.summary}</div>
                       <div className="mt-1 text-sm text-slate-500">
                         {item.client} | {item.service_type}
                       </div>
+                      {item.created_by_name && (
+                        <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
+                          Raised by {item.created_by_name}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right text-sm text-slate-500">
                       <div>Priority: {item.priority}</div>
@@ -316,7 +338,7 @@ export default function FollowUpDashboard() {
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Awaiting Triage</p>
                 <h3 className="mt-2 text-xl font-semibold text-slate-900">Completed Jobs Awaiting Review</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Recently completed tickets that still need an after-sales decision.
+                  Completed tickets that still do not have any manual or automatic after-sales case attached.
                 </p>
               </div>
               <button

@@ -3,13 +3,14 @@ import Layout from '../../components/Layout';
 import { fetchAdminSettings, updateAdminSettings } from '../../api/api';
 
 export default function AdminSettings() {
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const [settings, setSettings] = useState({
     systemName: '',
     supportEmail: '',
     enableNotifications: false,
     autoDispatchEnabled: false,
     smsNotificationsEnabled: false,
-    defaultTimeZone: 'Africa/Lagos',
+    defaultTimeZone: browserTimeZone,
     maxTechnicianAssignments: 5
   });
   const [message, setMessage] = useState('');
@@ -55,7 +56,7 @@ export default function AdminSettings() {
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Default TimeZone</span>
-            <input value={settings.defaultTimeZone || 'Africa/Lagos'} onChange={(e) => setSettings({ ...settings, defaultTimeZone: e.target.value })} className="mt-1 block w-full border px-3 py-2 rounded-lg" />
+            <input value={settings.defaultTimeZone || browserTimeZone} onChange={(e) => setSettings({ ...settings, defaultTimeZone: e.target.value })} className="mt-1 block w-full border px-3 py-2 rounded-lg" />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Max Technician Assignments</span>

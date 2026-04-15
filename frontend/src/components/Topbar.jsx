@@ -8,6 +8,21 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsRead
 } from '../api/api';
+import {
+  AFTER_SALES_CASE_CAPABILITIES,
+  AFTER_SALES_DASHBOARD_CAPABILITIES,
+  SUPERVISOR_DISPATCH_CAPABILITIES,
+  SUPERVISOR_TICKETS_CAPABILITIES,
+  SUPERVISOR_TRACKING_CAPABILITIES,
+  SUPERVISOR_USER_ACCESS_CAPABILITIES,
+  TECHNICIAN_HISTORY_CAPABILITIES,
+  TECHNICIAN_JOBS_CAPABILITIES,
+  TECHNICIAN_MESSAGES_CAPABILITIES,
+  TECHNICIAN_PROFILE_CAPABILITIES,
+  TECHNICIAN_SCHEDULE_CAPABILITIES,
+  USER_DIRECTORY_CAPABILITIES,
+  hasAnyCapability
+} from '../rbac';
 
 const routeMeta = [
   {
@@ -47,18 +62,6 @@ const routeMeta = [
     subtitle: 'See technician locations and field coverage.'
   },
   {
-    prefix: '/admin/technicians',
-    section: 'People',
-    title: 'Technicians',
-    subtitle: 'Manage technician accounts, availability, and field readiness.'
-  },
-  {
-    prefix: '/admin/clients',
-    section: 'People',
-    title: 'Clients',
-    subtitle: 'View and manage customer accounts.'
-  },
-  {
     prefix: '/admin/services',
     section: 'Operations',
     title: 'Services',
@@ -74,7 +77,7 @@ const routeMeta = [
     prefix: '/admin/user-management',
     section: 'People',
     title: 'Users',
-    subtitle: 'Manage system users by role and account status.'
+    subtitle: 'Manage all system users, technician field details, and client records in one place.'
   },
   {
     prefix: '/admin/settings',
@@ -117,6 +120,12 @@ const routeMeta = [
     section: 'Execution',
     title: 'Live Map',
     subtitle: 'Check technician availability and live field coverage.'
+  },
+  {
+    prefix: '/supervisor/user-access',
+    section: 'People',
+    title: 'Technician Access',
+    subtitle: 'Grant or revoke technician workspace permissions without changing each technician\'s core role.'
   },
   {
     prefix: '/technician/dashboard',
@@ -210,32 +219,86 @@ const routeMeta = [
   }
 ];
 
-const roleMeta = {
-  admin: {
-    workspace: 'Admin',
-    action: { label: 'Open tickets', path: '/admin/service-tickets' },
-    notificationsTarget: { label: 'Open tickets', path: '/admin/service-tickets' }
-  },
-  follow_up: {
-    workspace: 'After Sales',
-    action: { label: 'Open cases', path: '/follow-up/cases' },
-    notificationsTarget: { label: 'Open cases', path: '/follow-up/cases' }
-  },
-  supervisor: {
-    workspace: 'Supervisor',
-    action: { label: 'Open dispatch', path: '/supervisor/dispatch-board' },
-    notificationsTarget: { label: 'Open tickets', path: '/supervisor/service-tickets' }
-  },
-  technician: {
-    workspace: 'Technician',
-    action: { label: 'View jobs', path: '/technician/my-jobs' },
-    notificationsTarget: { label: 'View jobs', path: '/technician/my-jobs' }
-  },
-  client: {
-    workspace: 'Client',
-    action: { label: 'New request', path: '/client/service-requests' },
-    notificationsTarget: { label: 'Open notifications', path: '/client/notifications' }
+const getRoleMeta = (user, workspaceRole) => {
+  switch (workspaceRole) {
+    case 'superadmin':
+      return {
+        workspace: 'Superadmin',
+        action: { label: 'Open users', path: '/admin/user-management' },
+        notificationsTarget: { label: 'Open tickets', path: '/admin/service-tickets' }
+      };
+    case 'admin':
+      return {
+        workspace: 'Admin',
+        action: hasAnyCapability(user, USER_DIRECTORY_CAPABILITIES)
+          ? { label: 'Open users', path: '/admin/user-management' }
+          : { label: 'Open tickets', path: '/admin/service-tickets' },
+        notificationsTarget: { label: 'Open tickets', path: '/admin/service-tickets' }
+      };
+    case 'follow_up':
+      return {
+        workspace: 'After Sales',
+        action: hasAnyCapability(user, AFTER_SALES_CASE_CAPABILITIES)
+          ? { label: 'Open cases', path: '/follow-up/cases' }
+          : { label: 'Open dashboard', path: '/follow-up/dashboard' },
+        notificationsTarget: hasAnyCapability(user, AFTER_SALES_CASE_CAPABILITIES)
+          ? { label: 'Open cases', path: '/follow-up/cases' }
+          : { label: 'Open dashboard', path: '/follow-up/dashboard' }
+      };
+    case 'supervisor':
+      return {
+        workspace: 'Supervisor',
+        action:
+          (hasAnyCapability(user, SUPERVISOR_DISPATCH_CAPABILITIES) && { label: 'Open dispatch', path: '/supervisor/dispatch-board' }) ||
+          (hasAnyCapability(user, SUPERVISOR_TICKETS_CAPABILITIES) && { label: 'Open tickets', path: '/supervisor/service-tickets' }) ||
+          (hasAnyCapability(user, SUPERVISOR_TRACKING_CAPABILITIES) && { label: 'Open tracking', path: '/supervisor/technician-tracking' }) ||
+          (hasAnyCapability(user, SUPERVISOR_USER_ACCESS_CAPABILITIES) && { label: 'Open access', path: '/supervisor/user-access' }) ||
+          null,
+        notificationsTarget:
+          (hasAnyCapability(user, SUPERVISOR_TICKETS_CAPABILITIES) && { label: 'Open tickets', path: '/supervisor/service-tickets' }) ||
+          (hasAnyCapability(user, SUPERVISOR_DISPATCH_CAPABILITIES) && { label: 'Open dispatch', path: '/supervisor/dispatch-board' }) ||
+          null
+      };
+    case 'technician':
+      return {
+        workspace: 'Technician',
+        action:
+          (hasAnyCapability(user, TECHNICIAN_JOBS_CAPABILITIES) && { label: 'View jobs', path: '/technician/my-jobs' }) ||
+          (hasAnyCapability(user, TECHNICIAN_SCHEDULE_CAPABILITIES) && { label: 'View schedule', path: '/technician/schedule' }) ||
+          (hasAnyCapability(user, TECHNICIAN_MESSAGES_CAPABILITIES) && { label: 'Open messages', path: '/technician/messages' }) ||
+          (hasAnyCapability(user, TECHNICIAN_HISTORY_CAPABILITIES) && { label: 'Open history', path: '/technician/job-history' }) ||
+          (hasAnyCapability(user, TECHNICIAN_PROFILE_CAPABILITIES) && { label: 'Open profile', path: '/technician/profile' }) ||
+          null,
+        notificationsTarget:
+          (hasAnyCapability(user, TECHNICIAN_MESSAGES_CAPABILITIES) && { label: 'Open messages', path: '/technician/messages' }) ||
+          (hasAnyCapability(user, TECHNICIAN_JOBS_CAPABILITIES) && { label: 'View jobs', path: '/technician/my-jobs' }) ||
+          null
+      };
+    case 'client':
+      return {
+        workspace: 'Client',
+        action: { label: 'New request', path: '/client/service-requests' },
+        notificationsTarget: { label: 'Open notifications', path: '/client/notifications' }
+      };
+    default:
+      return null;
   }
+};
+
+const getWorkspaceRole = (pathname, fallbackRole) => {
+  if (pathname.startsWith('/follow-up/')) {
+    return 'follow_up';
+  }
+
+  if (pathname.startsWith('/supervisor/')) {
+    return 'supervisor';
+  }
+
+  if (pathname.startsWith('/technician/')) {
+    return 'technician';
+  }
+
+  return fallbackRole;
 };
 
 const formatNotificationTime = (value) => {
@@ -270,7 +333,7 @@ export default function Topbar({ toggleSidebar }) {
     [location.pathname]
   );
 
-  const activeRole = roleMeta[user?.role] || null;
+  const activeRole = getRoleMeta(user, getWorkspaceRole(location.pathname, user?.role));
   const primaryAction =
     activeRole && activeRole.action.path !== location.pathname ? activeRole.action : null;
   const notificationsTarget = activeRole?.notificationsTarget || null;

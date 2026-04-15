@@ -23,6 +23,7 @@ export const isFirebaseMessagingConfigured = Object.values(firebaseEnv).every(Bo
 
 let firebaseInitPromise = null;
 let foregroundHandlerAttached = false;
+const defaultNotificationIcon = '/favicon.svg';
 
 const resolveNotificationActionUrl = (data = {}) => {
   if (data.url) {
@@ -158,15 +159,16 @@ export async function setupMessageHandler(messaging) {
     onMessage(messaging, (payload) => {
       console.log('Message received in foreground:', payload);
       
+      const payloadData = payload.data || {};
       const notificationTitle = payload.notification?.title || 'Notification';
       const notificationOptions = {
         body: payload.notification?.body || '',
-        icon: '/logo.png',
-        badge: '/badge.png',
-        tag: payload.data?.type || 'default',
+        icon: payload.notification?.icon || payloadData.icon || defaultNotificationIcon,
+        badge: payloadData.badge || payloadData.icon || defaultNotificationIcon,
+        tag: payloadData.type || 'default',
         data: {
-          ...(payload.data || {}),
-          url: resolveNotificationActionUrl(payload.data),
+          ...payloadData,
+          url: resolveNotificationActionUrl(payloadData),
         }
       };
 

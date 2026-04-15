@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
-import { submitChecklist } from '../../api/api';
+import { fetchTechnicianJob, submitChecklist } from '../../api/api';
 import { FiCheckSquare, FiImage, FiSend, FiVideo } from 'react-icons/fi';
-import { useAuth } from '../../context/AuthContext';
 
 const checklists = {
   'Solar Installation': [
@@ -33,6 +32,14 @@ const checklists = {
   ]
 };
 
+const GENERIC_CHECKLIST = [
+  'Review ticket scope',
+  'Perform the assigned service work',
+  'Verify results with the customer',
+  'Capture proof of completion',
+  'Record final technician notes'
+];
+
 const maintenanceProfiles = [
   {
     value: 'commercial_area',
@@ -54,12 +61,42 @@ const maintenanceProfiles = [
   }
 ];
 
+const followUpCaseOptions = [
+  {
+    value: 'follow_up',
+    label: 'After-Sales Callback',
+    description: 'Use this when the after-sales team should follow up with the client after completion.'
+  },
+  {
+    value: 'warranty',
+    label: 'Warranty Attention',
+    description: 'Use this when the customer needs a warranty handoff immediately after the job closes.'
+  },
+  {
+    value: 'complaint',
+    label: 'Complaint Resolution',
+    description: 'Use this when there is an unresolved issue that needs customer recovery.'
+  },
+  {
+    value: 'revisit',
+    label: 'Revisit Required',
+    description: 'Use this when another site visit must be scheduled to finish or correct work.'
+  },
+  {
+    value: 'feedback',
+    label: 'Feedback Request',
+    description: 'Use this when the team wants a structured post-service feedback touchpoint.'
+  }
+];
+
 export default function TechnicianChecklist() {
   const [searchParams] = useSearchParams();
-  const jobId = searchParams.get('jobId') || searchParams.get('ticketId') || 1;
-  const { user } = useAuth();
-  const techName = user?.username || 'Ade Johnson';
-  const [serviceType, setServiceType] = useState('Solar Installation');
+  const ticketId = searchParams.get('ticketId') || searchParams.get('jobId');
+  const photoInputRef = useRef(null);
+  const videoInputRef = useRef(null);
+  const [job, setJob] = useState(null);
+  const [loading, setLoading] = useState(Boolean(ticketId));
+  const [error, setError] = useState(ticketId ? '' : 'Open a job from My Jobs before completing a checklist.');
   const [completed, setCompleted] = useState({});
   const [techNotes, setTechNotes] = useState('');
   const [photos, setPhotos] = useState([]);
@@ -71,33 +108,82 @@ export default function TechnicianChecklist() {
   const [warrantyProvided, setWarrantyProvided] = useState(true);
   const [warrantyPeriodDays, setWarrantyPeriodDays] = useState('30');
   const [warrantyNotes, setWarrantyNotes] = useState('');
+  const [followUpRequired, setFollowUpRequired] = useState(false);
+  const [followUpCaseType, setFollowUpCaseType] = useState('follow_up');
+  const [followUpDueDate, setFollowUpDueDate] = useState('');
+  const [followUpSummary, setFollowUpSummary] = useState('');
+  const [followUpDetails, setFollowUpDetails] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const steps = checklists[serviceType] || [];
+
+  const serviceType = job?.serviceType || job?.service || '';
+  const steps = checklists[serviceType] || GENERIC_CHECKLIST;
   const selectedMaintenanceProfile = maintenanceProfiles.find((item) => item.value === maintenanceProfile);
   const resolvedIntervalDays = maintenanceRequired
     ? Number(maintenanceIntervalDays || selectedMaintenanceProfile?.intervalDays || 0)
     : 0;
 
+  useEffect(() => {
+    if (!ticketId) {
+      setJob(null);
+      setLoading(false);
+      return;
+    }
+
+    const loadJob = async () => {
+      setLoading(true);
+      try {
+        const jobData = await fetchTechnicianJob(ticketId);
+        setJob(jobData);
+        setError('');
+      } catch (loadError) {
+        setJob(null);
+        setError(loadError.message || 'Unable to load the selected job.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadJob();
+  }, [ticketId]);
+
   const toggleStep = (index) => {
-    setCompleted(prev => ({
-      ...prev,
-      [index]: !prev[index]
+    setCompleted((previousState) => ({
+      ...previousState,
+      [index]: !previousState[index]
     }));
   };
 
   const addPhoto = () => {
-    const photoUrl = `job${jobId}-photo-${photos.length + 1}.jpg`;
-    setPhotos(prev => [...prev, photoUrl]);
+    photoInputRef.current?.click();
   };
 
   const addVideo = () => {
-    const videoUrl = `job${jobId}-video-${videos.length + 1}.mp4`;
-    setVideos(prev => [...prev, videoUrl]);
+    videoInputRef.current?.click();
+  };
+
+  const handlePhotoSelection = (event) => {
+    const selectedFiles = Array.from(event.target.files || []);
+    if (selectedFiles.length > 0) {
+      setPhotos((previousState) => [...previousState, ...selectedFiles]);
+    }
+    event.target.value = '';
+  };
+
+  const handleVideoSelection = (event) => {
+    const selectedFiles = Array.from(event.target.files || []);
+    if (selectedFiles.length > 0) {
+      setVideos((previousState) => [...previousState, ...selectedFiles]);
+    }
+    event.target.value = '';
   };
 
   const handleSubmit = async () => {
-    if (steps.some((_, i) => !completed[i])) {
+    if (!ticketId) {
+      setMessage('Select a ticket before submitting a checklist.');
+      return;
+    }
+    if (steps.some((_, index) => !completed[index])) {
       setMessage('Please complete all checklist items.');
       return;
     }
@@ -109,98 +195,167 @@ export default function TechnicianChecklist() {
       setMessage('Enter a valid warranty coverage period.');
       return;
     }
+    if (followUpRequired && !followUpSummary.trim()) {
+      setMessage('Add a short follow-up summary so after-sales knows what to do next.');
+      return;
+    }
+    if (followUpRequired && followUpCaseType === 'warranty' && !warrantyProvided) {
+      setMessage('Enable warranty coverage before creating a warranty handoff.');
+      return;
+    }
+
     setSubmitting(true);
     setMessage('Submitting checklist...');
+
     try {
-      const proofMedia = [
-        ...photos.map((photo) => ({ type: 'photo', name: photo, url: photo })),
-        ...videos.map((video) => ({ type: 'video', name: video, url: video }))
-      ];
       await submitChecklist({
-        jobId,
+        jobId: ticketId,
+        ticketId,
         serviceType,
         completed,
         notes: techNotes,
         photos,
         videos,
-        proof_media: proofMedia,
         maintenance_required: maintenanceRequired,
         maintenance_profile: maintenanceRequired ? maintenanceProfile : null,
         maintenance_interval_days: maintenanceRequired ? resolvedIntervalDays : null,
         maintenance_notes: maintenanceNotes,
         warranty_provided: warrantyProvided,
         warranty_period_days: warrantyProvided ? Number(warrantyPeriodDays) : null,
-        warranty_notes: warrantyNotes
+        warranty_notes: warrantyNotes,
+        follow_up_required: followUpRequired,
+        follow_up_case_type: followUpRequired ? followUpCaseType : null,
+        follow_up_due_date: followUpRequired && followUpDueDate ? followUpDueDate : null,
+        follow_up_summary: followUpRequired ? followUpSummary.trim() : null,
+        follow_up_details: followUpRequired ? followUpDetails.trim() : null
       });
-      setMessage('Checklist submitted successfully!');
+
+      setMessage(
+        followUpRequired
+          ? 'Checklist submitted. The after-sales team will receive a handoff when this ticket completes.'
+          : 'Checklist submitted successfully!'
+      );
+      setPhotos([]);
+      setVideos([]);
       setTimeout(() => {
         setMessage('');
-        // Navigate back or reset
       }, 3000);
-    } catch (error) {
-      setMessage('Failed to submit checklist.');
+    } catch (submitError) {
+      setMessage(submitError.message || 'Failed to submit checklist.');
     }
+
     setSubmitting(false);
   };
 
-  const progress = steps.length > 0 ? Object.keys(completed).filter(k => completed[k]).length / steps.length * 100 : 0;
+  const progress = steps.length > 0
+    ? (Object.keys(completed).filter((key) => completed[key]).length / steps.length) * 100
+    : 0;
+
+  if (!ticketId) {
+    return (
+      <Layout>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <h2 className="text-xl font-semibold">Checklist needs a selected ticket</h2>
+          <p className="mt-2 text-sm">
+            Open a job first so the checklist can use the actual service type and completion record.
+          </p>
+          <Link
+            to="/technician/my-jobs"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Go to My Jobs
+          </Link>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
+          <div className="inline-block">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-500"></div>
+          </div>
+          <p className="mt-2 text-slate-600">Loading ticket checklist...</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error || !job) {
+    return (
+      <Layout>
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
+          <h2 className="text-xl font-semibold">Unable to open checklist</h2>
+          <p className="mt-2 text-sm">{error || 'The selected ticket could not be loaded.'}</p>
+          <Link
+            to="/technician/my-jobs"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Back to My Jobs
+          </Link>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
       <div className="mb-8">
-        <h2 className="text-2xl font-semibold text-slate-800 flex items-center gap-3 mb-4">
+        <h2 className="mb-4 flex items-center gap-3 text-2xl font-semibold text-slate-800">
           <FiCheckSquare className="text-emerald-500" size={28} />
-          Digital Checklist - Job #{jobId}
+          Digital Checklist - Ticket #{ticketId}
         </h2>
-        <div className="flex gap-4 mb-6">
-          <select 
-            value={serviceType} 
-            onChange={(e) => setServiceType(e.target.value)}
-            className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          >
-            {Object.keys(checklists).map(type => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
+        <div className="mb-6 flex flex-wrap gap-3 text-sm">
+          <div className="rounded-full bg-emerald-50 px-4 py-2 font-medium text-emerald-900">
+            {serviceType || 'Service'}
+          </div>
+          <div className="rounded-full bg-slate-100 px-4 py-2 text-slate-700">
+            {job.address || 'Location pending'}
+          </div>
         </div>
+        {!checklists[serviceType] && (
+          <p className="text-sm text-amber-700">
+            This ticket does not have a custom checklist template yet, so the general completion checklist is being used.
+          </p>
+        )}
       </div>
 
-      {/* Progress */}
-      <div className="mb-8 p-6 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-2xl shadow-lg">
-        <div className="flex items-center justify-between mb-2">
+      <div className="mb-8 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 p-6 text-white shadow-lg">
+        <div className="mb-2 flex items-center justify-between">
           <span>Completion Progress</span>
           <span className="font-bold">{Math.round(progress)}%</span>
         </div>
-        <div className="w-full bg-white/20 rounded-full h-3">
-          <div 
-            className="bg-white h-3 rounded-full transition-all duration-500" 
-            style={{width: `${progress}%`}}
+        <div className="h-3 w-full rounded-full bg-white/20">
+          <div
+            className="h-3 rounded-full bg-white transition-all duration-500"
+            style={{ width: `${progress}%` }}
           ></div>
         </div>
       </div>
 
-      {/* Checklist Steps */}
-      <div className="bg-white rounded-2xl shadow-sm border mb-8">
-        <div className="p-6 border-b border-slate-200">
-          <h3 className="text-lg font-semibold mb-2">Service Procedures ({steps.length} steps)</h3>
+      <div className="mb-8 rounded-2xl border bg-white shadow-sm">
+        <div className="border-b border-slate-200 p-6">
+          <h3 className="mb-2 text-lg font-semibold">Service Procedures ({steps.length} steps)</h3>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 p-6">
           {steps.map((step, index) => (
-            <div key={index} className="flex items-start gap-3 p-4 border border-slate-200 rounded-xl hover:shadow-sm transition group">
+            <div key={step} className="group flex items-start gap-3 rounded-xl border border-slate-200 p-4 transition hover:shadow-sm">
               <button
                 onClick={() => toggleStep(index)}
-                className={`flex-shrink-0 w-6 h-6 rounded-lg border-2 mt-0.5 flex items-center justify-center transition-all duration-200 mt-1 ${
+                className={`mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-200 ${
                   completed[index]
-                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-md'
+                    ? 'border-emerald-500 bg-emerald-500 text-white shadow-md'
                     : 'border-slate-300 hover:border-slate-400'
                 }`}
               >
                 {completed[index] && <FiCheckSquare size={14} />}
               </button>
-              <div className="flex-1 min-w-0">
-                <label className="block text-sm font-medium text-slate-900 mb-1">{step}</label>
+              <div className="min-w-0 flex-1">
+                <label className="mb-1 block text-sm font-medium text-slate-900">{step}</label>
                 {completed[index] && (
-                  <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Completed</span>
+                  <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">Completed</span>
                 )}
               </div>
             </div>
@@ -221,7 +376,7 @@ export default function TechnicianChecklist() {
             <input
               type="checkbox"
               checked={maintenanceRequired}
-              onChange={(e) => setMaintenanceRequired(e.target.checked)}
+              onChange={(event) => setMaintenanceRequired(event.target.checked)}
             />
             Create planned maintenance reminder
           </label>
@@ -264,7 +419,7 @@ export default function TechnicianChecklist() {
                 type="number"
                 min="1"
                 value={maintenanceIntervalDays}
-                onChange={(e) => setMaintenanceIntervalDays(e.target.value)}
+                onChange={(event) => setMaintenanceIntervalDays(event.target.value)}
                 placeholder={selectedMaintenanceProfile ? String(selectedMaintenanceProfile.intervalDays) : 'Days'}
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
               />
@@ -273,7 +428,7 @@ export default function TechnicianChecklist() {
               <label className="mb-2 block text-sm font-semibold text-slate-900">Maintenance Notes</label>
               <textarea
                 value={maintenanceNotes}
-                onChange={(e) => setMaintenanceNotes(e.target.value)}
+                onChange={(event) => setMaintenanceNotes(event.target.value)}
                 placeholder="Add why this cadence fits the site, seasonal concerns, dust level, customer constraints, or access notes."
                 rows={3}
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
@@ -312,7 +467,7 @@ export default function TechnicianChecklist() {
             <input
               type="checkbox"
               checked={warrantyProvided}
-              onChange={(e) => setWarrantyProvided(e.target.checked)}
+              onChange={(event) => setWarrantyProvided(event.target.checked)}
             />
             Warranty included
           </label>
@@ -325,7 +480,7 @@ export default function TechnicianChecklist() {
               type="number"
               min="1"
               value={warrantyPeriodDays}
-              onChange={(e) => setWarrantyPeriodDays(e.target.value)}
+              onChange={(event) => setWarrantyPeriodDays(event.target.value)}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
             />
           </div>
@@ -333,7 +488,7 @@ export default function TechnicianChecklist() {
             <label className="mb-2 block text-sm font-semibold text-slate-900">Warranty Notes</label>
             <textarea
               value={warrantyNotes}
-              onChange={(e) => setWarrantyNotes(e.target.value)}
+              onChange={(event) => setWarrantyNotes(event.target.value)}
               rows={3}
               placeholder="State coverage scope, exclusions, and anything the after-sales team should know."
               className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
@@ -342,45 +497,154 @@ export default function TechnicianChecklist() {
         </div>
       </div>
 
-      {/* Notes & Photos */}
-      <div className="grid lg:grid-cols-2 gap-6 mb-8">
+      <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">After-Sales Handoff</p>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">Tell the follow-up team what should happen after this job closes.</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              Use this only when the completed work needs immediate after-sales action. The case will appear in the
+              after-sales queue automatically after the ticket reaches completed status.
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+            <input
+              type="checkbox"
+              checked={followUpRequired}
+              onChange={(event) => setFollowUpRequired(event.target.checked)}
+            />
+            Create after-sales handoff
+          </label>
+        </div>
+
+        <div className={`mt-5 ${followUpRequired ? 'opacity-100' : 'pointer-events-none opacity-50'}`}>
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
+            {followUpCaseOptions.map((option) => {
+              const active = followUpCaseType === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setFollowUpCaseType(option.value)}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    active
+                      ? 'border-amber-500 bg-amber-50 shadow-sm'
+                      : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-semibold text-slate-900">{option.label}</div>
+                    <div className={`h-3 w-3 rounded-full ${active ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-500">{option.description}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[240px_1fr]">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-900">Due Date</label>
+              <input
+                type="date"
+                value={followUpDueDate}
+                onChange={(event) => setFollowUpDueDate(event.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200"
+              />
+              <p className="mt-2 text-xs text-slate-500">Leave blank to let the system set the default urgency.</p>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-900">Handoff Summary</label>
+              <input
+                value={followUpSummary}
+                onChange={(event) => setFollowUpSummary(event.target.value)}
+                placeholder="Example: Client requested a callback to confirm system performance."
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-semibold text-slate-900">After-Sales Details</label>
+            <textarea
+              value={followUpDetails}
+              onChange={(event) => setFollowUpDetails(event.target.value)}
+              rows={4}
+              placeholder="Share what the after-sales agent should know before contacting the customer."
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            />
+          </div>
+
+          <div className="mt-4 rounded-2xl bg-slate-950 px-4 py-4 text-sm text-slate-200">
+            {followUpRequired ? (
+              <>
+                This ticket will hand off to <span className="font-semibold text-white">{followUpCaseType.replace('_', ' ')}</span>
+                {' '}work after completion. Make sure the summary clearly tells the after-sales team what outcome the
+                customer is expecting.
+              </>
+            ) : (
+              'No immediate after-sales case will be created from this job.'
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8 grid gap-6 lg:grid-cols-2">
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-3">Technician Notes</label>
+          <label className="mb-3 block text-sm font-semibold text-slate-900">Technician Notes</label>
           <textarea
             value={techNotes}
-            onChange={(e) => setTechNotes(e.target.value)}
+            onChange={(event) => setTechNotes(event.target.value)}
             placeholder="Describe work performed, issues found, materials used..."
             rows={5}
-            className="w-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+            className="w-full resize-vertical rounded-xl border border-slate-300 p-4 focus:border-transparent focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-3">
+          <label className="mb-3 block text-sm font-semibold text-slate-900">
             Proof Uploads ({photos.length + videos.length})
           </label>
-          <div className="space-y-2 mb-4">
-            {photos.map((photo, i) => (
-              <div key={i} className="w-full h-24 bg-gradient-to-br from-slate-200 to-slate-300 rounded-lg flex items-center justify-center text-sm text-slate-500 overflow-hidden">
-                <span>{photo}</span>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handlePhotoSelection}
+          />
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            multiple
+            className="hidden"
+            onChange={handleVideoSelection}
+          />
+          <div className="mb-4 space-y-2">
+            {photos.map((photo, index) => (
+              <div key={`${photo.name}-${index}`} className="flex h-24 w-full items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-slate-200 to-slate-300 px-4 text-sm text-slate-500">
+                <span className="text-center">{photo.name}</span>
               </div>
             ))}
-            {videos.map((video, i) => (
-              <div key={`${video}-${i}`} className="w-full h-24 bg-gradient-to-br from-sky-100 to-slate-200 rounded-lg flex items-center justify-center text-sm text-slate-600 overflow-hidden">
-                <span>{video}</span>
+            {videos.map((video, index) => (
+              <div key={`${video.name}-${index}`} className="flex h-24 w-full items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-sky-100 to-slate-200 px-4 text-sm text-slate-600">
+                <span className="text-center">{video.name}</span>
               </div>
             ))}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <button
+              type="button"
               onClick={addPhoto}
-              className="w-full flex items-center gap-2 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl transition font-medium border-2 border-dashed border-slate-300 hover:border-slate-400"
+              className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-100 px-4 py-3 font-medium transition hover:border-slate-400 hover:bg-slate-200"
             >
               <FiImage /> Add Photo
             </button>
             <button
+              type="button"
               onClick={addVideo}
-              className="w-full flex items-center gap-2 px-4 py-3 bg-sky-50 hover:bg-sky-100 rounded-xl transition font-medium border-2 border-dashed border-sky-300 hover:border-sky-400"
+              className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-sky-300 bg-sky-50 px-4 py-3 font-medium transition hover:border-sky-400 hover:bg-sky-100"
             >
               <FiVideo /> Add Video
             </button>
@@ -388,16 +652,15 @@ export default function TechnicianChecklist() {
         </div>
       </div>
 
-      {/* Submit */}
-      <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-slate-200">
+      <div className="flex flex-col gap-4 border-t border-slate-200 pt-6 sm:flex-row">
         <button
           onClick={handleSubmit}
-          disabled={submitting || steps.some((_, i) => !completed[i])}
-          className="flex-1 flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold rounded-xl shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-grow"
+          disabled={submitting || steps.some((_, index) => !completed[index])}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 px-8 py-4 font-semibold text-white shadow-lg transition-all duration-200 hover:from-emerald-600 hover:to-green-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? (
             <>
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+              <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-white"></div>
               Submitting...
             </>
           ) : (
@@ -408,9 +671,13 @@ export default function TechnicianChecklist() {
           )}
         </button>
         {message && (
-          <div className={`p-4 rounded-xl text-sm font-medium flex-1 flex items-center justify-center ${
-            message.includes('success') ? 'bg-emerald-100 text-emerald-800 border-emerald-300 border' : 'bg-red-100 text-red-800 border-red-300 border'
-          }`}>
+          <div
+            className={`flex flex-1 items-center justify-center rounded-xl p-4 text-sm font-medium ${
+              message.toLowerCase().includes('success') || message.toLowerCase().includes('submitted')
+                ? 'border border-emerald-300 bg-emerald-100 text-emerald-800'
+                : 'border border-red-300 bg-red-100 text-red-800'
+            }`}
+          >
             {message}
           </div>
         )}

@@ -12,6 +12,7 @@ const firebaseConfig = {
 };
 
 const isConfigured = Object.values(firebaseConfig).every(Boolean);
+const defaultNotificationIcon = '/favicon.svg';
 
 const resolveActionUrl = (data = {}) => {
   if (data.url) {
@@ -49,13 +50,14 @@ if (isConfigured) {
   messaging.onBackgroundMessage((payload) => {
     console.log('Background message received:', payload);
 
+    const payloadData = payload.data || {};
     const notificationTitle = payload.notification?.title || 'AFN Notification';
     const notificationOptions = {
       body: payload.notification?.body || 'You have a new notification',
-      icon: '/logo.png',
-      badge: '/badge.png',
-      tag: payload.data?.type || 'default',
-      data: payload.data || {},
+      icon: payload.notification?.icon || payloadData.icon || defaultNotificationIcon,
+      badge: payloadData.badge || payloadData.icon || defaultNotificationIcon,
+      tag: payloadData.type || 'default',
+      data: payloadData,
     };
 
     self.registration.showNotification(notificationTitle, notificationOptions);

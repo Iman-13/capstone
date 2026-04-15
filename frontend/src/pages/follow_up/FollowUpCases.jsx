@@ -21,6 +21,16 @@ const CASE_TYPE_OPTIONS = [
 const CASE_TYPE_LABELS = Object.fromEntries(
   CASE_TYPE_OPTIONS.map((option) => [option.value, option.label])
 );
+const CREATION_SOURCE_LABELS = {
+  manual: 'Manual',
+  completion_flow: 'From Completion',
+  maintenance_alert: 'Maintenance Alert'
+};
+const CREATION_SOURCE_TONES = {
+  manual: 'bg-slate-200 text-slate-700',
+  completion_flow: 'bg-amber-100 text-amber-800',
+  maintenance_alert: 'bg-emerald-100 text-emerald-800'
+};
 
 const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Low' },
@@ -146,7 +156,7 @@ export default function FollowUpCases() {
     try {
       const [caseList, ticketList] = await Promise.all([
         fetchFollowUpCases(requestFilters),
-        fetchServiceTickets()
+        fetchServiceTickets({ workspace: 'after_sales' })
       ]);
 
       const eligibleTickets = ticketList.filter((ticket) => ticket.status === 'completed');
@@ -294,7 +304,14 @@ export default function FollowUpCases() {
       </div>
 
       <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+          Technician handoffs now create after-sales cases automatically when the checklist flags follow-up work.
+          Use manual case creation here for exceptions, customer complaints that arrive later, or admin-led interventions.
+        </div>
         <h3 className="mb-4 text-lg font-semibold">Open New After-Sales Case</h3>
+        <p className="mb-4 text-sm text-slate-500">
+          Manual cases are best for work that did not originate directly from a technician completion handoff.
+        </p>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Completed Ticket</label>
@@ -408,7 +425,16 @@ export default function FollowUpCases() {
             </div>
           ) : (
             cases.map((caseItem) => (
-              <div key={caseItem.id} className="rounded-2xl border border-slate-200 p-4">
+              <div
+                key={caseItem.id}
+                className={`rounded-2xl border p-4 ${
+                  caseItem.creation_source === 'completion_flow'
+                    ? 'border-amber-200 bg-amber-50/50'
+                    : caseItem.creation_source === 'maintenance_alert'
+                      ? 'border-emerald-200 bg-emerald-50/40'
+                      : 'border-slate-200'
+                }`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="font-semibold text-slate-900">{caseItem.summary}</div>
@@ -416,7 +442,12 @@ export default function FollowUpCases() {
                       Ticket #{caseItem.service_ticket} | {caseItem.client_name} | {caseItem.service_type_name}
                     </div>
                   </div>
-                  <StatusBadge status={caseItem.status} size="sm" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${CREATION_SOURCE_TONES[caseItem.creation_source] || 'bg-slate-200 text-slate-700'}`}>
+                      {caseItem.creation_source_label || CREATION_SOURCE_LABELS[caseItem.creation_source] || 'Manual'}
+                    </span>
+                    <StatusBadge status={caseItem.status} size="sm" />
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-500">
@@ -424,6 +455,7 @@ export default function FollowUpCases() {
                   <span>Priority: {caseItem.priority}</span>
                   <span>Due: {formatDate(caseItem.due_date)}</span>
                   <span>{caseItem.requires_revisit ? 'Revisit required' : 'No revisit required'}</span>
+                  {caseItem.created_by_name && <span>Raised by: {caseItem.created_by_name}</span>}
                 </div>
 
                 {renderClientDetails(caseItem)}

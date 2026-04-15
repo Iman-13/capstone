@@ -112,8 +112,6 @@ export default function AdminTechnicians() {
             <option value="on_job">on_job</option>
             <option value="offline">offline</option>
           </select>
-          <input type="number" className="border rounded-xl p-2" placeholder="Latitude" value={formData.lat} onChange={(e) => setFormData({ ...formData, lat: e.target.value })} />
-          <input type="number" className="border rounded-xl p-2" placeholder="Longitude" value={formData.lng} onChange={(e) => setFormData({ ...formData, lng: e.target.value })} />
           {!editingTech && (
             <>
               <input
@@ -129,6 +127,24 @@ export default function AdminTechnicians() {
                 placeholder="Confirm Password"
                 value={formData.passwordConfirm}
                 onChange={(e) => setFormData({ ...formData, passwordConfirm: e.target.value })}
+              />
+            </>
+          )}
+          {editingTech && (
+            <>
+              <input
+                type="number"
+                className="border rounded-xl p-2"
+                placeholder="Latitude"
+                value={formData.lat}
+                onChange={(e) => setFormData({ ...formData, lat: e.target.value })}
+              />
+              <input
+                type="number"
+                className="border rounded-xl p-2"
+                placeholder="Longitude"
+                value={formData.lng}
+                onChange={(e) => setFormData({ ...formData, lng: e.target.value })}
               />
             </>
           )}

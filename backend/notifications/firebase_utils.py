@@ -248,7 +248,7 @@ def send_low_stock_notification(inventory_item):
     body = f"Current: {inventory_item.available_quantity}, Threshold: {inventory_item.minimum_stock}"
     
     # Send to all admin users
-    admin_users = User.objects.filter(role='admin', is_active=True)
+    admin_users = User.objects.filter(role__in=['superadmin', 'admin'], is_active=True)
 
     send_team_notification(
         message,

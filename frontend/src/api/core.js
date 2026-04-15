@@ -123,6 +123,7 @@ export const normalizeSla = (sla) => {
 
 export const normalizeUser = (user) => ({
   ...user,
+  capabilities: Array.isArray(user?.capabilities) ? user.capabilities : [],
   name: getDisplayName(user),
   active: user?.status === 'active' && user?.is_active !== false,
   isAvailable: Boolean(user?.is_available),
@@ -134,6 +135,12 @@ export const normalizeUser = (user) => ({
 export const normalizeTicket = (ticket) => {
   const requestDetails = ticket?.request_details || {};
   const location = requestDetails?.location || {};
+  const crewMembers = Array.isArray(ticket?.crew_members)
+    ? ticket.crew_members.map((member) => ({
+        ...member,
+        name: member?.name || member?.username || 'Technician'
+      }))
+    : [];
   return {
     ...ticket,
     requestId: ticket?.request || requestDetails?.id || null,
@@ -143,6 +150,9 @@ export const normalizeTicket = (ticket) => {
     priority: String(ticket?.priority || 'normal').toLowerCase(),
     assignedTech: ticket?.technician_name || '',
     assignedTechnicianId: ticket?.technician || ticket?.technician_id || null,
+    crewMembers,
+    crewSummary: crewMembers.map((member) => member.name).join(', '),
+    teamSize: (ticket?.technician_name ? 1 : 0) + crewMembers.length,
     locationDesc: location?.address || ticket?.locationDesc || '',
     lat: location?.latitude == null ? ticket?.lat : Number(location.latitude),
     lng: location?.longitude == null ? ticket?.lng : Number(location.longitude),

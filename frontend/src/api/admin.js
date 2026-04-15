@@ -9,11 +9,11 @@ import {
 
 export const fetchAdminUsers = async () => {
   try {
-    const { data } = await api.get('/admin/users/');
+    const { data } = await api.get('/users/');
     const userArray = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
     return Array.isArray(userArray) ? userArray.map(normalizeUser) : [];
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, 'Unable to load admin users.'));
+    throw new Error(getApiErrorMessage(error, 'Unable to load users.'));
   }
 };
 
@@ -43,6 +43,36 @@ export const deactivateAdminUser = async (userId) => {
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Unable to deactivate user.'));
+  }
+};
+
+export const fetchAssignableCapabilities = async () => {
+  try {
+    const { data } = await api.get('/users/available_capabilities/');
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Unable to load capabilities.'));
+  }
+};
+
+export const fetchUserCapabilities = async (userId) => {
+  try {
+    const { data } = await api.get(`/users/${userId}/capabilities/`);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Unable to load user access.'));
+  }
+};
+
+export const updateUserCapabilities = async (userId, capabilities) => {
+  try {
+    const payload = {
+      capabilities: Array.isArray(capabilities) ? capabilities : []
+    };
+    const { data } = await api.put(`/users/${userId}/capabilities/`, payload);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Unable to update user access.'));
   }
 };
 
@@ -115,9 +145,7 @@ export const createAdminTechnician = async (tech) => {
       ...buildUserCreatePayload(tech),
       role: 'technician',
       status: tech.status === 'offline' ? 'inactive' : 'active',
-      is_available: tech.status === 'available',
-      current_latitude: tech.lat === '' ? null : tech.lat,
-      current_longitude: tech.lng === '' ? null : tech.lng
+      is_available: tech.status === 'available'
     };
     const { data } = await api.post('/admin/technicians/', payload);
     return normalizeUser(data);
@@ -148,7 +176,7 @@ export const deleteAdminTechnician = async (id) => {
   }
 };
 
-export const assignTechnician = async ({ ticketId, technicianId, technicianName }) => {
+export const assignTechnician = async ({ ticketId, technicianId, technicianName, crewIds = [] }) => {
   try {
     let resolvedTechnicianId = technicianId;
     if (!resolvedTechnicianId && technicianName) {
@@ -159,7 +187,8 @@ export const assignTechnician = async ({ ticketId, technicianId, technicianName 
       throw new Error('Please select a valid technician.');
     }
     const { data } = await api.post(`/services/service-tickets/${ticketId}/assign/`, {
-      technician_id: resolvedTechnicianId
+      technician_id: resolvedTechnicianId,
+      crew_ids: Array.isArray(crewIds) ? crewIds : []
     });
     return data;
   } catch (error) {

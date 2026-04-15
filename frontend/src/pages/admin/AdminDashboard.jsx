@@ -11,7 +11,10 @@ import {
   FiUsers
 } from 'react-icons/fi';
 import Layout from '../../components/Layout';
+import ActiveTechnicianJobs from '../../components/ActiveTechnicianJobs';
+import { useAuth } from '../../context/AuthContext';
 import { fetchDashboardStats } from '../../api/api';
+import { canViewAdminUserDirectory } from '../../rbac';
 import {
   AUTO_REFRESH_MS,
   formatDate,
@@ -43,6 +46,7 @@ function StatCard({ label, value, helper, icon: Icon, tone = 'blue' }) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -89,6 +93,7 @@ export default function AdminDashboard() {
   const warningCount = Number(slaOverview.warning_count || 0);
   const lowStock = Number(overview.low_stock_items || 0);
   const dueMaintenance = Number(overview.due_maintenance || 0);
+  const canOpenUsers = canViewAdminUserDirectory(user);
 
   const primaryMetrics = [
     {
@@ -136,6 +141,16 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            {canOpenUsers ? (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/user-management')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+              >
+                Users
+                <FiArrowRight className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => navigate('/admin/analytics')}
@@ -286,6 +301,12 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+
+        {/* ── Active Technician Jobs ── */}
+        <ActiveTechnicianJobs 
+          jobs={Array.isArray(stats?.active_technician_jobs) ? stats.active_technician_jobs : []}
+          title="Technician Live Jobs"
+        />
 
         {/* ── SLA Watchlist (compact table) ── */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5">

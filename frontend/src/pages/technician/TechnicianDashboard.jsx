@@ -17,6 +17,16 @@ import QuickNavGrid from '../../components/QuickNavGrid';
 import { fetchNotifications, fetchTechnicianDashboard, updateTechnicianLocation } from '../../api/api';
 import { useGPSTracking } from '../../hooks/useGPSTracking';
 import GPSStatusIndicator from '../../components/GPSStatusIndicator';
+import {
+  TECHNICIAN_CHECKLIST_CAPABILITIES,
+  TECHNICIAN_HISTORY_CAPABILITIES,
+  TECHNICIAN_JOBS_CAPABILITIES,
+  TECHNICIAN_MESSAGES_CAPABILITIES,
+  TECHNICIAN_NAVIGATION_CAPABILITIES,
+  TECHNICIAN_PROFILE_CAPABILITIES,
+  TECHNICIAN_SCHEDULE_CAPABILITIES,
+  hasAnyCapability
+} from '../../rbac';
 
 const EMPTY_DASHBOARD = {
   technician: {
@@ -148,6 +158,13 @@ export default function TechnicianDashboard() {
   const activeJobs = Array.isArray(dashboard.active_jobs) ? dashboard.active_jobs : [];
   const recentActivity = Array.isArray(dashboard.recent_activity) ? dashboard.recent_activity : [];
   const unreadNotifications = notifications.filter((item) => item.status === 'unread').length;
+  const canOpenJobs = hasAnyCapability(user, TECHNICIAN_JOBS_CAPABILITIES);
+  const canOpenSchedule = hasAnyCapability(user, TECHNICIAN_SCHEDULE_CAPABILITIES);
+  const canOpenNavigation = hasAnyCapability(user, TECHNICIAN_NAVIGATION_CAPABILITIES);
+  const canOpenChecklist = hasAnyCapability(user, TECHNICIAN_CHECKLIST_CAPABILITIES);
+  const canOpenMessages = hasAnyCapability(user, TECHNICIAN_MESSAGES_CAPABILITIES);
+  const canOpenHistory = hasAnyCapability(user, TECHNICIAN_HISTORY_CAPABILITIES);
+  const canOpenProfile = hasAnyCapability(user, TECHNICIAN_PROFILE_CAPABILITIES);
 
   const currentJob =
     activeJobs.find((job) => normalizeStatus(job.status) === 'in_progress') ||
@@ -162,16 +179,41 @@ export default function TechnicianDashboard() {
   const gpsLatitude = location?.latitude ?? Number(dashboard.technician?.current_location?.latitude);
   const gpsLongitude = location?.longitude ?? Number(dashboard.technician?.current_location?.longitude);
   const gpsAccuracy = location?.accuracy;
+  const currentJobQuery = currentJob ? `?ticketId=${currentJob.id}` : '';
 
   const quickLinks = [
-    { label: 'My Jobs', path: '/technician/my-jobs', description: 'Manage assigned jobs and status.', icon: <FiClipboard /> },
-    { label: 'Schedule', path: '/technician/schedule', description: "Review today's appointments.", icon: <FiCalendar /> },
-    { label: 'Map Navigation', path: '/technician/map-navigation', description: 'Open the live route experience.', icon: <FiMap /> },
-    { label: 'Digital Checklist', path: '/technician/checklist', description: 'Complete service procedures.', icon: <FiCheckSquare /> },
-    { label: 'Messages', path: '/technician/messages', description: 'Communicate with supervisors.', icon: <FiMessageSquare /> },
-    { label: 'Job History', path: '/technician/job-history', description: 'Review completed work.', icon: <FiFileText /> },
-    { label: 'Profile', path: '/technician/profile', description: 'Update account and metrics.', icon: <FiSettings /> }
-  ];
+    canOpenJobs
+      ? { label: 'My Jobs', path: '/technician/my-jobs', description: 'Manage assigned jobs and status.', icon: <FiClipboard /> }
+      : null,
+    canOpenSchedule
+      ? { label: 'Schedule', path: '/technician/schedule', description: "Review today's appointments.", icon: <FiCalendar /> }
+      : null,
+    canOpenNavigation
+      ? {
+          label: 'Map Navigation',
+          path: currentJobQuery ? `/technician/map-navigation${currentJobQuery}` : '/technician/map-navigation',
+          description: currentJob ? 'Open navigation for your current ticket.' : 'Choose a job first, then start navigation.',
+          icon: <FiMap />
+        }
+      : null,
+    canOpenChecklist
+      ? {
+          label: 'Digital Checklist',
+          path: currentJobQuery ? `/technician/checklist${currentJobQuery}` : '/technician/checklist',
+          description: currentJob ? 'Complete service procedures for the current ticket.' : 'Choose a job first, then complete its checklist.',
+          icon: <FiCheckSquare />
+        }
+      : null,
+    canOpenMessages
+      ? { label: 'Messages', path: '/technician/messages', description: 'Communicate with supervisors.', icon: <FiMessageSquare /> }
+      : null,
+    canOpenHistory
+      ? { label: 'Job History', path: '/technician/job-history', description: 'Review completed work.', icon: <FiFileText /> }
+      : null,
+    canOpenProfile
+      ? { label: 'Profile', path: '/technician/profile', description: 'Update account and metrics.', icon: <FiSettings /> }
+      : null
+  ].filter(Boolean);
 
   return (
     <Layout>
@@ -236,34 +278,42 @@ export default function TechnicianDashboard() {
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
-                <Link
-                  to="/technician/my-jobs"
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Open My Jobs
-                </Link>
-                <Link
-                  to={`/technician/map-navigation?ticketId=${currentJob.id}`}
-                  className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600"
-                >
-                  Navigate to Job
-                </Link>
-                <Link
-                  to={`/technician/checklist?ticketId=${currentJob.id}`}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                >
-                  Open Checklist
-                </Link>
+                {canOpenJobs && (
+                  <Link
+                    to="/technician/my-jobs"
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    Open My Jobs
+                  </Link>
+                )}
+                {canOpenNavigation && (
+                  <Link
+                    to={`/technician/map-navigation?ticketId=${currentJob.id}`}
+                    className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600"
+                  >
+                    Navigate to Job
+                  </Link>
+                )}
+                {canOpenChecklist && (
+                  <Link
+                    to={`/technician/checklist?ticketId=${currentJob.id}`}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                  >
+                    Open Checklist
+                  </Link>
+                )}
               </div>
             </>
           ) : (
             <div className="mt-5">
-              <Link
-                to="/technician/schedule"
-                className="inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                Check Schedule
-              </Link>
+              {canOpenSchedule && (
+                <Link
+                  to="/technician/schedule"
+                  className="inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  Check Schedule
+                </Link>
+              )}
             </div>
           )}
 
@@ -323,9 +373,11 @@ export default function TechnicianDashboard() {
         <section className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-slate-900">Today's Schedule</h3>
-            <Link to="/technician/schedule" className="text-sm font-medium text-blue-600 hover:text-blue-700">
-              View full schedule
-            </Link>
+            {canOpenSchedule && (
+              <Link to="/technician/schedule" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                View full schedule
+              </Link>
+            )}
           </div>
           <div className="mt-4 space-y-3">
             {loading ? (
@@ -364,9 +416,11 @@ export default function TechnicianDashboard() {
               <FiBell className="text-blue-600" />
               Notifications
             </h3>
-            <Link to="/technician/messages" className="text-sm font-medium text-blue-600 hover:text-blue-700">
-              Open messages
-            </Link>
+            {canOpenMessages && (
+              <Link to="/technician/messages" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                Open messages
+              </Link>
+            )}
           </div>
           <div className="mt-4 space-y-3">
             {loading ? (
@@ -407,9 +461,11 @@ export default function TechnicianDashboard() {
       <section className="mt-8 rounded-2xl bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold text-slate-900">Recent Activity</h3>
-          <Link to="/technician/job-history" className="text-sm font-medium text-blue-600 hover:text-blue-700">
-            Open history
-          </Link>
+          {canOpenHistory && (
+            <Link to="/technician/job-history" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+              Open history
+            </Link>
+          )}
         </div>
         <div className="mt-4 space-y-3">
           {loading ? (

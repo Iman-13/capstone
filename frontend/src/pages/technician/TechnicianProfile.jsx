@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
-import { fetchTechnicianProfile, updateTechnicianProfile } from '../../api/api';
+import { fetchTechnicianProfile, updateTechnicianProfile, api } from '../../api/api';
 
 export default function TechnicianProfile() {
   const { user } = useAuth();
@@ -9,22 +9,38 @@ export default function TechnicianProfile() {
   const [profile, setProfile] = useState({
     phone: '',
     email: '',
-    skills: '',
+    skills: [],
     totalCompleted: 0,
     avgCompletionTime: '',
     rating: 0
   });
+  const [availableServiceTypes, setAvailableServiceTypes] = useState([]);
   const [editing, setEditing] = useState(false);
+  const [editingSkills, setEditingSkills] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [selectedSkills, setSelectedSkills] = useState([]);
+  const [newSkillService, setNewSkillService] = useState('');
+  const [newSkillLevel, setNewSkillLevel] = useState('intermediate');
 
   useEffect(() => {
     loadProfile();
+    loadAvailableServiceTypes();
   }, []);
 
   const loadProfile = async () => {
     const data = await fetchTechnicianProfile(techName);
     setProfile(data);
+    setSelectedSkills(data.skills || []);
+  };
+
+  const loadAvailableServiceTypes = async () => {
+    try {
+      const { data } = await api.get('/services/service-types/');
+      setAvailableServiceTypes(Array.isArray(data) ? data : data.results || []);
+    } catch (error) {
+      console.error('Failed to load service types:', error);
+    }
   };
 
   const handleSave = async () => {
@@ -41,7 +57,53 @@ export default function TechnicianProfile() {
     setSaving(false);
   };
 
-  const skillsList = profile.skills ? profile.skills.split(',').map(s => s.trim()) : [];
+  const handleAddSkill = async () => {
+    if (!newSkillService) {
+      setMessage('Please select a service type');
+      return;
+    }
+    
+    setSaving(true);
+    setMessage('Adding skill...');
+    try {
+      const payload = {
+        service_type: parseInt(newSkillService, 10),
+        skill_level: newSkillLevel
+      };
+      await api.post('/services/technician-skills/', payload);
+      setNewSkillService('');
+      setNewSkillLevel('intermediate');
+      await loadProfile();
+      setMessage('Skill added successfully!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      const errorDetail = error.response?.data;
+      const errorMsg = typeof errorDetail === 'object' 
+        ? Object.entries(errorDetail).map(([key, val]) => `${key}: ${val}`).join(', ')
+        : errorDetail?.detail || error.message;
+      setMessage('Failed to add skill: ' + errorMsg);
+    }
+    setSaving(false);
+  };
+
+  const handleRemoveSkill = async (skillId) => {
+    if (!window.confirm('Are you sure you want to remove this skill?')) return;
+    
+    setSaving(true);
+    try {
+      await api.delete(`/services/technician-skills/${skillId}/`);
+      await loadProfile();
+      setMessage('Skill removed successfully!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      setMessage('Failed to remove skill.');
+    }
+    setSaving(false);
+  };
+
+  const skillsList = Array.isArray(profile.skills) 
+    ? profile.skills 
+    : (profile.skills ? profile.skills.split(',').map(s => s.trim()) : []);
 
   return (
     <Layout>
@@ -84,15 +146,78 @@ export default function TechnicianProfile() {
             </div>
           </div>
 
+          {/* Skills Section */}
           <div className="mb-10">
-            <label className="block text-sm font-semibold text-slate-900 mb-4">Skills</label>
-            <div className="flex flex-wrap gap-2">
-              {skillsList.map((skill, i) => (
-                <span key={i} className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                  {skill}
-                </span>
-              ))}
+            <div className="flex justify-between items-center mb-4">
+              <label className="block text-sm font-semibold text-slate-900">Skills</label>
+              <button
+                onClick={() => setEditingSkills(!editingSkills)}
+                className="text-sm px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition"
+              >
+                {editingSkills ? 'Done' : 'Edit Skills'}
+              </button>
             </div>
+
+            {/* Display Skills */}
+            <div className="flex flex-wrap gap-2 mb-6">
+              {Array.isArray(profile.skills) && profile.skills.length > 0 ? (
+                profile.skills.map((skill, i) => (
+                  <div key={skill.id || i} className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                    <span>{skill.service_type_name || skill}</span>
+                    {skill.skill_level && <span className="text-xs opacity-75">({skill.skill_level})</span>}
+                    {editingSkills && (
+                      <button
+                        onClick={() => handleRemoveSkill(skill.id)}
+                        className="ml-2 text-red-500 hover:text-red-700 font-bold"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-500 text-sm">No skills yet</p>
+              )}
+            </div>
+
+            {/* Add Skill Form */}
+            {editingSkills && (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <h4 className="font-semibold text-slate-900 mb-3">Add New Skill</h4>
+                <div className="grid md:grid-cols-3 gap-3">
+                  <select
+                    value={newSkillService}
+                    onChange={(e) => setNewSkillService(e.target.value)}
+                    className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select service type...</option>
+                    {availableServiceTypes.map(st => (
+                      <option key={st.id} value={st.id}>
+                        {st.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={newSkillLevel}
+                    onChange={(e) => setNewSkillLevel(e.target.value)}
+                    className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="expert">Expert</option>
+                  </select>
+
+                  <button
+                    onClick={handleAddSkill}
+                    disabled={saving || !newSkillService}
+                    className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition disabled:opacity-50"
+                  >
+                    {saving ? 'Adding...' : 'Add Skill'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid md:grid-cols-3 gap-6 pt-8 border-t border-slate-200">
@@ -166,14 +291,11 @@ export default function TechnicianProfile() {
           </div>
 
           <div className="bg-white p-8 rounded-2xl shadow-lg border">
-            <h4 className="font-bold mb-6 text-slate-900 text-center">Certified Skills</h4>
-            <div className="grid grid-cols-2 gap-3">
-              {['Solar Installation', 'CCTV', 'Fire Detection', 'AC Services'].map(skill => (
-                <div key={skill} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                  <span className="text-sm">{skill}</span>
-                </div>
-              ))}
+            <h4 className="font-bold mb-6 text-slate-900 text-center">Skill Summary</h4>
+            <div className="space-y-2">
+              <p className="text-sm text-slate-600 text-center">
+                Total Skills: <span className="font-bold text-slate-900">{Array.isArray(profile.skills) ? profile.skills.length : 0}</span>
+              </p>
             </div>
           </div>
         </div>

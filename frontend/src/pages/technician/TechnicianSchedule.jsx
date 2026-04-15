@@ -59,43 +59,65 @@ export default function TechnicianSchedule() {
           <p className="text-sm text-slate-400">Check My Jobs for current assignments</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {schedule.map((item) => (
-            <div key={item.id} className="group bg-gradient-to-r from-slate-50 to-slate-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border hover:border-blue-200">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div key={item.id} className="group bg-white rounded-2xl p-4 shadow-md border border-slate-200 hover:shadow-lg hover:border-blue-300 transition-all flex flex-col">
+              {/* Card Header */}
+              <div className="mb-3 flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                      {item.service}
-                    </div>
-                    <StatusBadge status={item.status} size="sm" />
+                  <div className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold inline-block">
+                    {item.service}
                   </div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-1">{item.client}</h3>
-                  <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
-                    <span className="flex items-center gap-1"><FiMapPin /> {item.address || 'Location TBD'}</span>
-                  </div>
-                  <p className="text-slate-500">{item.notes || 'No additional notes'}</p>
                 </div>
-                <div className="text-right lg:text-left">
-                  <div className="text-2xl font-bold text-slate-900 mb-1">{formatTime(item.scheduledDate)}</div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-medium w-max mx-auto lg:ml-0 ${
-                    item.priority === 'High' ? 'bg-red-100 text-red-800' :
-                    item.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
-                  }`}>
-                    {item.priority}
-                  </div>
+                <StatusBadge status={item.status} size="sm" />
+              </div>
+
+              {/* Client Name */}
+              <h3 className="text-lg font-bold text-slate-900 mb-2 line-clamp-2">{item.client}</h3>
+
+              {/* Scheduled Date */}
+              <div className="mb-3 text-sm">
+                <p className="text-slate-500 text-xs mb-1">Scheduled</p>
+                <p className="text-slate-900 font-semibold">{formatTime(item.scheduledDate)}</p>
+              </div>
+
+              {/* Location */}
+              <div className="mb-3 text-sm">
+                <p className="text-slate-500 text-xs mb-1">Location</p>
+                <p className="text-slate-700 flex items-start gap-1">
+                  <FiMapPin className="flex-shrink-0 mt-0.5" size={14} />
+                  <span className="line-clamp-2">{item.address || 'Location TBD'}</span>
+                </p>
+              </div>
+
+              {/* Priority Badge */}
+              <div className="mb-3">
+                <div className={`px-2 py-1 rounded-full text-xs font-medium w-max ${
+                  item.priority === 'High' ? 'bg-red-100 text-red-800' :
+                  item.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                }`}>
+                  {item.priority || 'Normal'} Priority
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 mt-6 pt-6 border-t border-slate-200">
+
+              {/* Notes */}
+              {item.notes && (
+                <div className="mb-4 flex-1">
+                  <p className="text-xs text-slate-500 line-clamp-2">{item.notes}</p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2 mt-auto">
                 <button
                   type="button"
                   onClick={() => navigate(`/technician/my-jobs?ticketId=${item.ticketId || item.id}`)}
-                  className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium"
+                  className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-xs font-medium transition-colors"
                 >
                   View Details
                 </button>
-                <a href={`/technician/map-navigation?ticketId=${item.ticketId || item.id}`} className="px-6 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium flex items-center gap-1">
-                  <FiMapPin size={16} /> Navigate
+                <a href={`/technician/map-navigation?ticketId=${item.ticketId || item.id}`} className="px-3 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-xs font-medium flex items-center justify-center gap-1 transition-colors">
+                  <FiMapPin size={14} /> Navigate
                 </a>
               </div>
             </div>

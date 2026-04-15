@@ -5,7 +5,15 @@ import Layout from '../../components/Layout';
 import StatsCard from '../../components/StatsCard';
 import QuickNavGrid from '../../components/QuickNavGrid';
 import StatusBadge from '../../components/StatusBadge';
+import ActiveTechnicianJobs from '../../components/ActiveTechnicianJobs';
+import { useAuth } from '../../context/AuthContext';
 import { fetchDashboardStats } from '../../api/api';
+import {
+  SUPERVISOR_DISPATCH_CAPABILITIES,
+  SUPERVISOR_TICKETS_CAPABILITIES,
+  SUPERVISOR_TRACKING_CAPABILITIES,
+  hasAnyCapability
+} from '../../rbac';
 
 const formatDate = (value) => {
   if (!value) return 'No schedule set';
@@ -21,6 +29,7 @@ const formatDate = (value) => {
 };
 
 export default function SupervisorDashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -42,27 +51,36 @@ export default function SupervisorDashboard() {
   const recentTickets = stats?.recent_tickets || [];
   const availableTechnicians = technicianPerformance.filter((tech) => tech.is_available).length;
   const topPerformers = technicianPerformance.slice(0, 5);
+  const canOpenDispatch = hasAnyCapability(user, SUPERVISOR_DISPATCH_CAPABILITIES);
+  const canOpenTickets = hasAnyCapability(user, SUPERVISOR_TICKETS_CAPABILITIES);
+  const canOpenTracking = hasAnyCapability(user, SUPERVISOR_TRACKING_CAPABILITIES);
 
   const quickLinks = [
-    {
-      label: 'Dispatch Board',
-      path: '/supervisor/dispatch-board',
-      description: 'Assign jobs and keep the field load balanced.',
-      icon: <FiMap />
-    },
-    {
-      label: 'Service Tickets',
-      path: '/supervisor/service-tickets',
-      description: 'Review open ticket flow and team workload.',
-      icon: <FiClipboard />
-    },
-    {
-      label: 'Technician Monitoring',
-      path: '/supervisor/technician-tracking',
-      description: 'Track technician availability and live movement.',
-      icon: <FiUsers />
-    }
-  ];
+    canOpenDispatch
+      ? {
+          label: 'Dispatch Board',
+          path: '/supervisor/dispatch-board',
+          description: 'Assign jobs and keep the field load balanced.',
+          icon: <FiMap />
+        }
+      : null,
+    canOpenTickets
+      ? {
+          label: 'Service Tickets',
+          path: '/supervisor/service-tickets',
+          description: 'Review open ticket flow and team workload.',
+          icon: <FiClipboard />
+        }
+      : null,
+    canOpenTracking
+      ? {
+          label: 'Technician Monitoring',
+          path: '/supervisor/technician-tracking',
+          description: 'Track technician availability and live movement.',
+          icon: <FiUsers />
+        }
+      : null
+  ].filter(Boolean);
 
   return (
     <Layout>
@@ -76,22 +94,28 @@ export default function SupervisorDashboard() {
               action needed to keep service moving. This dashboard now follows that pattern.
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[320px]">
-            <button
-              onClick={() => navigate('/supervisor/dispatch-board')}
-              className="inline-flex items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
-            >
-              <FiMap className="mr-2" />
-              Open Dispatch Board
-            </button>
-            <button
-              onClick={() => navigate('/supervisor/technician-tracking')}
-              className="inline-flex items-center justify-center rounded-2xl bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
-            >
-              <FiUsers className="mr-2" />
-              Monitor Technicians
-            </button>
-          </div>
+          {(canOpenDispatch || canOpenTracking) && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[320px]">
+              {canOpenDispatch && (
+                <button
+                  onClick={() => navigate('/supervisor/dispatch-board')}
+                  className="inline-flex items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                >
+                  <FiMap className="mr-2" />
+                  Open Dispatch Board
+                </button>
+              )}
+              {canOpenTracking && (
+                <button
+                  onClick={() => navigate('/supervisor/technician-tracking')}
+                  className="inline-flex items-center justify-center rounded-2xl bg-white/10 px-4 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  <FiUsers className="mr-2" />
+                  Monitor Technicians
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
@@ -124,13 +148,15 @@ export default function SupervisorDashboard() {
                 <h3 className="text-xl font-semibold text-slate-900">Technician Readiness</h3>
                 <p className="mt-1 text-sm text-slate-500">Availability and completed work from the last 30 days.</p>
               </div>
-              <button
-                onClick={() => navigate('/supervisor/technician-tracking')}
-                className="hidden items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
-              >
-                Open tracking
-                <FiArrowRight size={14} />
-              </button>
+              {canOpenTracking && (
+                <button
+                  onClick={() => navigate('/supervisor/technician-tracking')}
+                  className="hidden items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
+                >
+                  Open tracking
+                  <FiArrowRight size={14} />
+                </button>
+              )}
             </div>
             <div className="mt-5 space-y-3">
               {topPerformers.length > 0 ? (
@@ -174,19 +200,28 @@ export default function SupervisorDashboard() {
           </div>
         </div>
 
+        <div>
+          <ActiveTechnicianJobs 
+            jobs={Array.isArray(stats?.active_technician_jobs) ? stats.active_technician_jobs : []}
+            title="Technician Live Jobs"
+          />
+        </div>
+
         <div className="rounded-2xl bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-xl font-semibold text-slate-900">Recent Team Tickets</h3>
               <p className="mt-1 text-sm text-slate-500">The latest jobs and schedules under supervisor control.</p>
             </div>
-            <button
-              onClick={() => navigate('/supervisor/service-tickets')}
-              className="hidden items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
-            >
-              Review queue
-              <FiArrowRight size={14} />
-            </button>
+            {canOpenTickets && (
+              <button
+                onClick={() => navigate('/supervisor/service-tickets')}
+                className="hidden items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
+              >
+                Review queue
+                <FiArrowRight size={14} />
+              </button>
+            )}
           </div>
 
           <div className="mt-5 space-y-3">

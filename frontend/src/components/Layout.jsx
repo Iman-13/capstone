@@ -10,7 +10,7 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen bg-slate-100">
       <div className="min-h-screen md:flex">
-        <Sidebar role={user?.role} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar user={user} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="min-w-0 flex-1">
           <Topbar toggleSidebar={() => setSidebarOpen((value) => !value)} />
           <main className="mx-auto w-full max-w-[1600px] px-3 py-4 sm:px-4 md:px-4 lg:px-6">

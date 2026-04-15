@@ -13,6 +13,8 @@ def backend_home(request):
                 'login': '/api/users/login/',
                 'register': '/api/users/register/',
                 'logout': '/api/users/logout/',
+                'password_reset_request': '/api/users/password_reset_request/',
+                'password_reset_confirm': '/api/users/password_reset_confirm/',
             },
             'dashboards': {
                 'role_stats': '/api/dashboard/stats/',

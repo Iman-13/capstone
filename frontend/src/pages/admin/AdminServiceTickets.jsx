@@ -119,6 +119,8 @@ export default function AdminServiceTickets() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
+            <StatusBadge status="pending" size="sm" />
+            <StatusBadge status="approved" size="sm" />
             <StatusBadge status="not_started" size="sm" />
             <StatusBadge status="assigned" size="sm" />
             <StatusBadge status="in_progress" size="sm" />
@@ -152,6 +154,7 @@ export default function AdminServiceTickets() {
                   <SLABadge sla={ticket.sla} />
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
                     {ticket.assignedTech || 'Unassigned'}
+                    {ticket.crewMembers?.length ? ` + ${ticket.crewMembers.length} crew` : ''}
                   </span>
                 </div>
 
@@ -168,6 +171,12 @@ export default function AdminServiceTickets() {
                     <span className="font-medium text-slate-900">SLA:</span>{' '}
                     {formatSlaSummary(ticket.sla)}
                   </div>
+                  {ticket.crewMembers?.length > 0 && (
+                    <div>
+                      <span className="font-medium text-slate-900">Crew:</span>{' '}
+                      {ticket.crewSummary}
+                    </div>
+                  )}
                 </div>
 
                 {!ticket.assignedTech && (
@@ -224,7 +233,12 @@ export default function AdminServiceTickets() {
                         <span className="text-xs text-slate-500">{formatSlaSummary(ticket.sla)}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 font-medium">{ticket.assignedTech || 'Unassigned'}</td>
+                    <td className="px-3 py-2 font-medium">
+                      <div>{ticket.assignedTech || 'Unassigned'}</div>
+                      {ticket.crewMembers?.length > 0 && (
+                        <div className="text-xs font-normal text-slate-500">{ticket.crewSummary}</div>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       {ticket.assignedTech ? (
                         <span className="text-xs font-medium text-slate-500">{queueActionLabel(ticket)}</span>

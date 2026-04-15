@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/Layout';
 import { fetchTechnicianHistory } from '../../api/api';
-import { FiDownload, FiEye, FiFileText } from 'react-icons/fi';
+import { FiDownload, FiEye, FiFileText, FiImage } from 'react-icons/fi';
 
 const formatDate = (dateStr) =>
   new Date(dateStr).toLocaleDateString('en-US', {
@@ -29,6 +29,7 @@ export default function TechnicianJobHistory() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [imageViewer, setImageViewer] = useState(null);
 
   useEffect(() => {
     loadHistory();
@@ -80,69 +81,87 @@ export default function TechnicianJobHistory() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {history.map((job) => (
             <div
               key={job.id}
-              className="rounded-2xl border border-slate-200 bg-white p-8 transition-shadow hover:-translate-y-1 hover:shadow-xl"
+              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-md hover:shadow-lg hover:border-green-300 transition-all flex flex-col"
             >
-              <div className="mb-6 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                <div className="flex-1">
-                  <div className="mb-4 flex items-center gap-4">
-                    <div className="rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2 font-semibold text-white">
-                      COMPLETED
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-800">
-                      {job.service}
-                    </span>
-                  </div>
-                  <h3 className="mb-3 text-2xl font-bold text-slate-900">{job.client}</h3>
-                  <div className="mb-4 grid grid-cols-2 gap-6 text-sm">
-                    <div>
-                      <span className="text-slate-500">Ticket ID</span>
-                      <div className="font-semibold text-slate-900">#{job.ticketId}</div>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Completed</span>
-                      <div className="font-semibold">{formatDate(job.scheduledDate)}</div>
-                    </div>
-                    {job.priority && (
-                      <div>
-                        <span className="text-slate-500">Priority</span>
-                        <div
-                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                            job.priority === 'High'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-green-100 text-green-800'
-                          }`}
-                        >
-                          {job.priority}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {job.notes && (
-                    <div className="mt-4 rounded-r-xl border-l-4 border-green-400 bg-slate-50 p-4">
-                      <span className="block text-sm leading-relaxed text-slate-700">{job.notes}</span>
-                    </div>
-                  )}
+              {/* Status Badge */}
+              <div className="mb-3">
+                <div className="inline-block rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-1 font-semibold text-xs text-white">
+                  COMPLETED
                 </div>
-                <div className="flex flex-col gap-3 border-slate-200 pt-4 lg:border-l lg:pl-8 lg:pt-0">
+              </div>
+
+              {/* Service Type */}
+              <div className="mb-2">
+                <span className="inline-block rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
+                  {job.service}
+                </span>
+              </div>
+
+              {/* Client Name */}
+              <h3 className="mb-3 text-lg font-bold text-slate-900 line-clamp-2">{job.client}</h3>
+
+              {/* Ticket Info */}
+              <div className="mb-3 space-y-2 text-sm">
+                <div>
+                  <span className="text-slate-500 text-xs">Ticket ID</span>
+                  <div className="font-semibold text-slate-900">#{job.ticketId}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500 text-xs">Completed</span>
+                  <div className="font-semibold text-slate-900">{formatDate(job.scheduledDate)}</div>
+                </div>
+                {job.priority && (
+                  <div>
+                    <span className="text-slate-500 text-xs">Priority</span>
+                    <div
+                      className={`rounded-full px-2 py-1 text-xs font-semibold w-max ${
+                        job.priority === 'High'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}
+                    >
+                      {job.priority}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              {job.notes && (
+                <div className="mb-3 rounded-lg border-l-4 border-green-400 bg-green-50 p-2 flex-1">
+                  <span className="block text-xs leading-relaxed text-green-700 line-clamp-2">{job.notes}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="mt-auto flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedJob(job)}
+                  className="flex items-center justify-center gap-1 rounded-lg bg-blue-500 px-3 py-2 font-medium text-white text-xs hover:bg-blue-600 transition-colors"
+                >
+                  <FiEye size={14} /> Details
+                </button>
+                {job.completion_proof_images && job.completion_proof_images.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => setSelectedJob(job)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-6 py-3 font-medium text-white shadow-md transition hover:bg-blue-600 lg:w-auto"
+                    onClick={() => setImageViewer(job)}
+                    className="flex items-center justify-center gap-1 rounded-lg bg-emerald-500 px-3 py-2 font-medium text-white text-xs hover:bg-emerald-600 transition-colors"
                   >
-                    <FiEye size={18} /> View Details
+                    <FiImage size={14} /> Photos ({job.completion_proof_images.length})
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadHistoryReport(job)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 px-6 py-3 font-medium text-slate-700 shadow-md transition hover:bg-slate-200 lg:w-auto"
-                  >
-                    <FiDownload size={18} /> Download Report
-                  </button>
-                </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => downloadHistoryReport(job)}
+                  className="flex items-center justify-center gap-1 rounded-lg bg-slate-100 px-3 py-2 font-medium text-slate-700 text-xs hover:bg-slate-200 transition-colors"
+                >
+                  <FiDownload size={14} /> Report
+                </button>
               </div>
             </div>
           ))}
@@ -217,6 +236,54 @@ export default function TechnicianJobHistory() {
           </div>
         </div>
       )}
+
+      {imageViewer && imageViewer.completion_proof_images && imageViewer.completion_proof_images.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900">Proof Images</h3>
+                <p className="text-slate-600">
+                  Ticket #{imageViewer.ticketId} - {imageViewer.client}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImageViewer(null)}
+                className="rounded-lg bg-slate-100 px-3 py-2 text-slate-600 hover:bg-slate-200"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+              {imageViewer.completion_proof_images.map((image, idx) => (
+                <div
+                  key={idx}
+                  className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                >
+                  <img
+                    src={image}
+                    alt={`Proof ${idx + 1}`}
+                    className="h-48 w-full object-cover hover:scale-105 transition"
+                  />
+                  <div className="absolute inset-0 flex items-end bg-gradient-to-t from-slate-900 to-transparent p-3 opacity-0 hover:opacity-100 transition">
+                    <span className="text-sm font-medium text-white">Image {idx + 1}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {imageViewer.completion_notes && (
+              <div className="mt-6 rounded-xl border-l-4 border-blue-500 bg-blue-50 p-4">
+                <h4 className="mb-2 font-semibold text-blue-900">Work Notes</h4>
+                <p className="text-sm text-blue-800">{imageViewer.completion_notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
+
