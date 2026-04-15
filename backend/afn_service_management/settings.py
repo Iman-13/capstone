@@ -104,6 +104,9 @@ LOGOUT_REDIRECT_URL = '/'
 # Application definition
 
 INSTALLED_APPS = [
+    # Daphne must be first (before staticfiles)
+    'daphne',
+    
     # Django default apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -116,7 +119,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
-    'daphne',
     'channels',
 
     # Custom apps
